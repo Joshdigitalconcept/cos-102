@@ -6,5 +6,8 @@
   "scripts": {
     "build": "node scripts/generate-firebase-config.js",
     "generate-config": "node scripts/generate-firebase-config.js"
+  },
+  "dependencies": {
+    "@vercel/analytics": "^2.0.1"
   }
 }

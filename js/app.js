@@ -1,6 +1,6 @@
 /* COS 102 Quiz — App logic
    Created with love by gentlesoul.dev */
-
+import { Analytics } from "@vercel/analytics/next"
 const STORAGE = {
   user: 'cos102_user',
   history: 'cos102_history',
