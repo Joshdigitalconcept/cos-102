@@ -83,6 +83,10 @@
             <h2 class="section-title">Topics</h2>
             <div class="topic-chips" id="homeTopics"></div>
           </div>
+
+          <div class="visitor-footer">
+            <p class="visitor-text">👥 <span id="homeVisitors">0 visitors</span></p>
+          </div>
         </div>
       </section>
 
@@ -241,6 +245,18 @@
           <h1 class="page-title">Leaderboard</h1>
           <p class="page-desc">Live leaderboard. Scores sync when online. Keep practicing to climb.</p>
           <div class="lb-list" id="leaderboardList"></div>
+        </div>
+      </section>
+
+      <!-- 404 NOT FOUND -->
+      <section id="page-404" class="page">
+        <div class="page-inner">
+          <div class="error-container">
+            <div class="error-code">404</div>
+            <h1 class="error-title">Page not found</h1>
+            <p class="error-desc">The page you're looking for doesn't exist or has been moved.</p>
+            <button class="btn btn-primary" onclick="goHome()">Back to home</button>
+          </div>
         </div>
       </section>
     </main>

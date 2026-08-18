@@ -1,15 +1,58 @@
 /* COS 102 Quiz — App logic
    Created with love by gentlesoul.dev */
-import { Analytics } from "@vercel/analytics/next"
+
 const STORAGE = {
   user: 'cos102_user',
   history: 'cos102_history',
   leaderboard: 'cos102_lb',
-  theme: 'cos102_theme'
+  theme: 'cos102_theme',
+  visitors: 'cos102_visitors_count',
+  visitorsData: 'cos102_visitors_data'
 };
 
 // Only MCQ-style types (no typed short answers)
 const ALLOWED_TYPES = new Set(['multiple_choice', 'true_false', 'tricky']);
+
+// ---------- VISITOR COUNTER ----------
+function initVisitorCounter() {
+  const visitorsData = JSON.parse(localStorage.getItem(STORAGE.visitorsData)) || {
+    firstVisit: new Date().toISOString(),
+    lastVisit: new Date().toISOString(),
+    visitCount: 0,
+    uniqueId: generateUniqueId()
+  };
+  
+  visitorsData.lastVisit = new Date().toISOString();
+  visitorsData.visitCount = (visitorsData.visitCount || 0) + 1;
+  localStorage.setItem(STORAGE.visitorsData, JSON.stringify(visitorsData));
+  
+  // Increment global counter
+  let count = parseInt(localStorage.getItem(STORAGE.visitors) || '0', 10);
+  count++;
+  localStorage.setItem(STORAGE.visitors, count.toString());
+  
+  // Sync to Firebase if available
+  if (firebaseReady && db) {
+    db.collection('_stats').doc('visitors').set({
+      count: firebase.firestore.FieldValue.increment(1),
+      lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true }).catch(() => {});
+  }
+  
+  return count;
+}
+
+function generateUniqueId() {
+  return `visitor_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+function getVisitorCount() {
+  return parseInt(localStorage.getItem(STORAGE.visitors) || '0', 10);
+}
+
+function getVisitorData() {
+  return JSON.parse(localStorage.getItem(STORAGE.visitorsData)) || {};
+}
 
 let db = null;
 let firebaseReady = false;
@@ -33,6 +76,7 @@ let state = {
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
   initFirebase();
+  initVisitorCounter();
   const user = localStorage.getItem(STORAGE.user);
   if (user) {
     state.user = user;
@@ -59,8 +103,8 @@ function showOnboard() {
       hint.textContent = 'Letters, numbers, _ and - only';
       btn.disabled = true;
     } else {
-      hint.textContent = '';
-      btn.disabled = false;
+      // Check if username is already taken (locally)
+      checkUsernameAvailability(v, hint, btn);
     }
   });
 
@@ -70,13 +114,57 @@ function showOnboard() {
   btn.addEventListener('click', saveUsername);
 }
 
+async function checkUsernameAvailability(username, hint, btn) {
+  // Check local leaderboard first
+  const lb = getLocalLeaderboard();
+  if (lb.find(e => e.name.toLowerCase() === username.toLowerCase())) {
+    hint.textContent = '❌ Username already taken';
+    btn.disabled = true;
+    return;
+  }
+
+  // Check Firebase if available
+  if (firebaseReady && db) {
+    try {
+      const docSnapshot = await db.collection('leaderboard').doc(username.toLowerCase()).get();
+      if (docSnapshot.exists) {
+        hint.textContent = '❌ Username already taken';
+        btn.disabled = true;
+        return;
+      }
+    } catch (e) {
+      console.warn('Error checking Firebase availability:', e);
+      // Continue anyway if Firebase check fails
+    }
+  }
+
+  // Username is available
+  hint.textContent = '✓ Username available';
+  hint.style.color = 'var(--good)';
+  btn.disabled = false;
+}
+
+function clearUsernameHint() {
+  const hint = document.getElementById('usernameHint');
+  hint.textContent = '';
+  hint.style.color = '';
+}
+
 function saveUsername() {
   const name = document.getElementById('usernameInput').value.trim();
   if (name.length < 2) return;
+  
+  // Final check - make sure it's still unique
+  const lb = getLocalLeaderboard();
+  if (lb.find(e => e.name.toLowerCase() === name.toLowerCase())) {
+    alert('Username already taken! Please choose another.');
+    return;
+  }
+
   localStorage.setItem(STORAGE.user, name);
   state.user = name;
 
-  const lb = getLocalLeaderboard();
+  // Add to local leaderboard if new
   if (!lb.find(e => e.name === name)) {
     lb.push({ name, best: 0, attempts: 0, totalCorrect: 0, totalQuestions: 0 });
     saveLocalLeaderboard(lb);
@@ -90,10 +178,12 @@ function saveUsername() {
       attempts: 0,
       totalCorrect: 0,
       totalQuestions: 0,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true }).catch(e => console.warn('Firebase user seed failed', e));
   }
 
+  clearUsernameHint();
   document.getElementById('onboardOverlay').classList.add('hidden');
   showApp();
 }
@@ -168,7 +258,14 @@ function goTo(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   const el = document.getElementById('page-' + page);
-  if (el) el.classList.add('active');
+  if (!el) {
+    // Page doesn't exist, show 404
+    const notFound = document.getElementById('page-404');
+    if (notFound) notFound.classList.add('active');
+    closeSidebar();
+    return;
+  }
+  el.classList.add('active');
   const nav = document.querySelector(`.nav-item[data-page="${page}"]`);
   if (nav) nav.classList.add('active');
   closeSidebar();
@@ -269,6 +366,7 @@ function renderHome() {
   const totalQ = hist.reduce((s, h) => s + h.total, 0);
   const totalC = hist.reduce((s, h) => s + h.correct, 0);
   const avg = totalQ ? Math.round((totalC / totalQ) * 100) : 0;
+  const visitors = getVisitorCount();
 
   document.getElementById('homeStats').innerHTML = `
     <div class="stat-card"><span class="num">${hist.length}</span><span class="lbl">Sessions</span></div>
@@ -278,6 +376,12 @@ function renderHome() {
   document.getElementById('homeTopics').innerHTML = QUESTIONS_DATA.topics.map(t =>
     `<span class="chip">${t.name}</span>`
   ).join('');
+  
+  // Add visitor count at the bottom
+  const visitorEl = document.getElementById('homeVisitors');
+  if (visitorEl) {
+    visitorEl.textContent = `${visitors} visitor${visitors !== 1 ? 's' : ''}`;
+  }
 }
 
 // ---------- PRACTICE SETUP ----------
