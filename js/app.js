@@ -1,6 +1,6 @@
 /* COS 102 Quiz — App logic
    Created with love by gentlesoul.dev */
-import { Analytics } from "@vercel/analytics/next"
+import { inject } from '@vercel/analytics';
 const STORAGE = {
   user: 'cos102_user',
   history: 'cos102_history',
@@ -31,6 +31,9 @@ let state = {
 
 // ---------- BOOT ----------
 document.addEventListener('DOMContentLoaded', () => {
+  // Initialize Vercel Web Analytics
+  inject();
+  
   initTheme();
   initFirebase();
   const user = localStorage.getItem(STORAGE.user);
