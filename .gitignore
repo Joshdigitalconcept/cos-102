@@ -1,0 +1,9 @@
+# Real Firebase config (generated locally or on Vercel — never commit)
+js/firebase-config.js
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+.vscode/

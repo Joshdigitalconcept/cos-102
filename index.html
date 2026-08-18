@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="description" content="COS 102 Quiz — Practice Introduction to Computers. Created with love by gentlesoul.dev" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>COS 102 Quiz</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="manifest" href="manifest.json" />
+</head>
+<body>
+  <!-- Onboarding / Username -->
+  <div id="onboardOverlay" class="overlay hidden">
+    <div class="onboard-card">
+      <div class="onboard-icon">👋</div>
+      <h1>Welcome to COS 102 Quiz</h1>
+      <p>Enter a unique username to track your progress and appear on the leaderboard. No account needed.</p>
+      <input type="text" id="usernameInput" placeholder="Choose a username" maxlength="20" autocomplete="off" />
+      <p class="hint" id="usernameHint"></p>
+      <button class="btn btn-primary btn-block" id="saveUsernameBtn" disabled>Continue</button>
+      <p class="credit-mini">Created with love by <a href="https://gentlesoul.dev" target="_blank" rel="noopener">gentlesoul.dev</a></p>
+    </div>
+  </div>
+
+  <!-- App Shell -->
+  <div id="app" class="app hidden">
+    <!-- Top bar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="icon-btn" id="menuBtn" aria-label="Menu">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <div class="brand" onclick="goHome()">
+          <span class="brand-mark">COS</span>
+          <span class="brand-text">102 Quiz</span>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <span class="user-chip" id="userChip"></span>
+        <button class="icon-btn" id="themeBtn" aria-label="Toggle theme">
+          <svg class="icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+          <svg class="icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Side nav (mobile drawer + desktop) -->
+    <aside class="sidebar" id="sidebar">
+      <nav class="side-nav">
+        <button class="nav-item active" data-page="home"><span class="nav-icon">⌂</span> Home</button>
+        <button class="nav-item" data-page="practice"><span class="nav-icon">✎</span> Practice</button>
+        <button class="nav-item" data-page="progress"><span class="nav-icon">◈</span> Progress</button>
+        <button class="nav-item" data-page="leaderboard"><span class="nav-icon">★</span> Leaderboard</button>
+      </nav>
+      <div class="sidebar-footer">
+        <p>Created with love by<br><a href="https://gentlesoul.dev" target="_blank" rel="noopener"><strong>gentlesoul.dev</strong></a></p>
+      </div>
+    </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+    <!-- Main content -->
+    <main class="main">
+      <!-- HOME -->
+      <section id="page-home" class="page active">
+        <div class="page-inner">
+          <div class="hero">
+            <p class="eyebrow">COS 102 · Introduction to Computers</p>
+            <h1>Practice with purpose.</h1>
+            <p class="lede">Master every topic from the syllabus. Track your growth. Climb the leaderboard.</p>
+            <button class="btn btn-primary btn-lg" onclick="goTo('practice')">Start practicing</button>
+          </div>
+
+          <div class="stats-row" id="homeStats">
+            <!-- filled by JS -->
+          </div>
+
+          <div class="section">
+            <h2 class="section-title">Topics</h2>
+            <div class="topic-chips" id="homeTopics"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PRACTICE SETUP -->
+      <section id="page-practice" class="page">
+        <div class="page-inner practice-inner">
+          <header class="practice-hero">
+            <span class="practice-badge">Exam mode</span>
+            <h1 class="page-title">Set up your quiz</h1>
+            <p class="page-desc">Pick topics, choose how many questions, and set a time limit if you want one. Answer everything, then submit once at the end.</p>
+          </header>
+
+          <!-- Step 1: Topics -->
+          <div class="practice-block">
+            <div class="block-head">
+              <div class="step-num">1</div>
+              <div>
+                <h2 class="block-title">Topics</h2>
+                <p class="block-sub">Select one or more</p>
+              </div>
+              <div class="block-actions">
+                <button type="button" class="text-btn" id="selectAllTopics">Select all</button>
+                <button type="button" class="text-btn" id="clearTopics">Clear</button>
+              </div>
+            </div>
+            <div class="topic-grid" id="topicSelect"></div>
+          </div>
+
+          <!-- Step 2: Settings -->
+          <div class="practice-block">
+            <div class="block-head">
+              <div class="step-num">2</div>
+              <div>
+                <h2 class="block-title">Settings</h2>
+                <p class="block-sub">Questions and time</p>
+              </div>
+            </div>
+
+            <div class="settings-grid">
+              <div class="setting-card">
+                <label class="field-label" for="countInput">Number of questions</label>
+                <input type="number" id="countInput" class="num-input" min="1" max="500" value="20" />
+                <div class="preset-row" id="countPresets">
+                  <button type="button" data-count="10">10</button>
+                  <button type="button" data-count="20" class="active">20</button>
+                  <button type="button" data-count="30">30</button>
+                  <button type="button" data-count="50">50</button>
+                </div>
+                <p class="field-hint">Limited by how many questions the selected topics have</p>
+              </div>
+
+              <div class="setting-card">
+                <label class="field-label" for="timerInput">Time limit (minutes)</label>
+                <input type="number" id="timerInput" class="num-input" min="0" max="180" value="0" />
+                <div class="preset-row" id="timerPresets">
+                  <button type="button" data-mins="0" class="active">Off</button>
+                  <button type="button" data-mins="5">5</button>
+                  <button type="button" data-mins="10">10</button>
+                  <button type="button" data-mins="15">15</button>
+                </div>
+                <p class="field-hint">0 means no timer — take your time</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Start -->
+          <div class="practice-start">
+            <div class="start-summary" id="startSummary">Select topics to begin</div>
+            <button class="btn btn-primary btn-lg" id="startQuizBtn">Start quiz</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- QUIZ -->
+      <section id="page-quiz" class="page">
+        <div class="page-inner quiz-inner">
+          <div class="quiz-header">
+            <button class="text-btn" id="exitQuizBtn">← Exit</button>
+            <div class="quiz-status">
+              <span id="quizProgress">1 / 20</span>
+              <span class="timer" id="quizTimer" hidden>00:30</span>
+            </div>
+          </div>
+          <div class="progress-track"><div class="progress-fill" id="quizProgressFill"></div></div>
+
+          <div class="question-panel" id="questionPanel">
+            <div class="q-type" id="qType"></div>
+            <h2 class="q-text" id="qText"></h2>
+            <div class="q-options" id="qOptions"></div>
+            <div class="q-actions">
+              <button class="btn btn-ghost" id="prevBtn">← Previous</button>
+              <button class="btn btn-secondary" id="nextBtn">Next →</button>
+            </div>
+            <div class="submit-bar">
+              <p class="answered-count" id="answeredCount">0 of 20 answered</p>
+              <button class="btn btn-primary btn-block btn-lg" id="finalSubmitBtn">Submit quiz</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- RESULTS -->
+      <section id="page-results" class="page">
+        <div class="page-inner">
+          <div class="results-hero">
+            <div class="score-ring" id="scoreRing">
+              <svg viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="42" class="ring-bg"/>
+                <circle cx="50" cy="50" r="42" class="ring-fg" id="ringFg"/>
+              </svg>
+              <span id="scorePct">0%</span>
+            </div>
+            <h1 id="resultsTitle">Well done</h1>
+            <p id="resultsSub">You scored <strong id="scoreFraction">0 / 0</strong></p>
+          </div>
+
+          <div class="results-meta" id="resultsMeta"></div>
+
+          <div class="results-actions">
+            <button class="btn btn-primary btn-block" onclick="goTo('practice')">Practice again</button>
+            <button class="btn btn-secondary btn-block" id="reviewBtn">Review answers</button>
+            <button class="btn btn-ghost btn-block" onclick="goTo('leaderboard')">View leaderboard</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- REVIEW -->
+      <section id="page-review" class="page">
+        <div class="page-inner">
+          <button class="text-btn" onclick="goTo('results')">← Back to results</button>
+          <h1 class="page-title">Answer review</h1>
+          <div id="reviewList" class="review-list"></div>
+        </div>
+      </section>
+
+      <!-- PROGRESS / ANALYTICS -->
+      <section id="page-progress" class="page">
+        <div class="page-inner">
+          <h1 class="page-title">Your progress</h1>
+          <p class="page-desc">Real-time overview of how you’re doing across topics.</p>
+
+          <div class="analytics-grid" id="analyticsGrid">
+            <!-- filled by JS -->
+          </div>
+
+          <div class="section">
+            <h2 class="section-title">Recent sessions</h2>
+            <div id="sessionHistory" class="session-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- LEADERBOARD -->
+      <section id="page-leaderboard" class="page">
+        <div class="page-inner">
+          <h1 class="page-title">Leaderboard</h1>
+          <p class="page-desc">Live leaderboard. Scores sync when online. Keep practicing to climb.</p>
+          <div class="lb-list" id="leaderboardList"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Exit confirm -->
+  <div id="exitModal" class="overlay hidden">
+    <div class="modal">
+      <h3>Leave this quiz?</h3>
+      <p>Your current progress will not be saved.</p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="stayBtn">Stay</button>
+        <button class="btn btn-danger" id="leaveBtn">Leave</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase (optional – enable in js/firebase-config.js) -->
+  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/questions-data.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "name": "cos102-quiz",
+  "version": "1.0.0",
+  "private": true,
+  "description": "COS 102 Quiz — Introduction to Computers. Created with love by gentlesoul.dev",
+  "scripts": {
+    "build": "node scripts/generate-firebase-config.js",
+    "generate-config": "node scripts/generate-firebase-config.js"
+  }
+}
