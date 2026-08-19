@@ -1,5 +1,7 @@
-/* COS 102 Quiz — Service Worker for offline support */
-const CACHE = 'cos102-quiz-v2';
+/* COS 102 Quiz — Service Worker
+   Network-first so new deploys show up; cache is offline fallback only. */
+const CACHE = 'cos102-quiz-v4';
+
 const ASSETS = [
   './',
   './index.html',
@@ -10,33 +12,79 @@ const ASSETS = [
   './manifest.json'
 ];
 
-self.addEventListener('install', e => {
-  e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting())
+self.addEventListener('install', (event) => {
+  // Activate new worker immediately
+  self.skipWaiting();
+  event.waitUntil(
+    caches.open(CACHE).then((cache) => cache.addAll(ASSETS)).catch(() => {})
   );
 });
 
-self.addEventListener('activate', e => {
-  e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });
 
-self.addEventListener('fetch', e => {
-  // Don't cache Firebase / network API calls
-  if (e.request.url.includes('googleapis.com') || e.request.url.includes('firebaseio.com')) {
-    e.respondWith(fetch(e.request));
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+  if (request.method !== 'GET') return;
+
+  const url = request.url;
+
+  // Never cache Firebase / Google APIs
+  if (
+    url.includes('googleapis.com') ||
+    url.includes('firebaseio.com') ||
+    url.includes('firestore.googleapis.com') ||
+    url.includes('gstatic.com/firebasejs')
+  ) {
+    event.respondWith(fetch(request));
     return;
   }
-  e.respondWith(
-    caches.match(e.request).then(cached => {
-      return cached || fetch(e.request).then(res => {
-        const clone = res.clone();
-        caches.open(CACHE).then(c => c.put(e.request, clone));
-        return res;
-      }).catch(() => cached);
-    })
+
+  // Network-first for app shell (HTML/JS/CSS/config) so deploys apply
+  const isAppShell =
+    request.mode === 'navigate' ||
+    url.includes('/index.html') ||
+    url.includes('/js/') ||
+    url.includes('/css/') ||
+    url.endsWith('/sw.js') ||
+    url.includes('/manifest.json');
+
+  if (isAppShell) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response && response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match(request).then((cached) => cached || caches.match('./index.html')))
+    );
+    return;
+  }
+
+  // Other GETs: cache fallback
+  event.respondWith(
+    fetch(request)
+      .then((response) => {
+        if (response && response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE).then((cache) => cache.put(request, copy));
+        }
+        return response;
+      })
+      .catch(() => caches.match(request))
   );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
