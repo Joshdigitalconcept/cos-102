@@ -837,7 +837,7 @@ async function renderLeaderboard() {
       </div>
     </div>`;
   }).join('') +
-  `<p class="lb-footnote">Ranked by total correct answers, then questions answered. A high % on 1 question ranks below more correct answers overall.</p>
+  `<p class="lb-footnote">Ranked by total correct answers, then questions answered. A high % on 1 question ranks below more correct answers overall. · v5</p>
    <p class="fb-status ${source === 'firebase' ? 'on' : 'off'}">${source === 'firebase' ? '● Live leaderboard (Firebase)' : '○ Local leaderboard only'}</p>`;
 }
 

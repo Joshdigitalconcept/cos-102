@@ -1,6 +1,6 @@
 /* COS 102 Quiz — Service Worker
    Network-first so new deploys show up; cache is offline fallback only. */
-const CACHE = 'cos102-quiz-v4';
+const CACHE = 'cos102-quiz-v5';
 
 const ASSETS = [
   './',
