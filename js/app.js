@@ -3,56 +3,14 @@
 
 const STORAGE = {
   user: 'cos102_user',
+  claim: 'cos102_claim',
   history: 'cos102_history',
   leaderboard: 'cos102_lb',
-  theme: 'cos102_theme',
-  visitors: 'cos102_visitors_count',
-  visitorsData: 'cos102_visitors_data'
+  theme: 'cos102_theme'
 };
 
 // Only MCQ-style types (no typed short answers)
 const ALLOWED_TYPES = new Set(['multiple_choice', 'true_false', 'tricky']);
-
-// ---------- VISITOR COUNTER ----------
-function initVisitorCounter() {
-  const visitorsData = JSON.parse(localStorage.getItem(STORAGE.visitorsData)) || {
-    firstVisit: new Date().toISOString(),
-    lastVisit: new Date().toISOString(),
-    visitCount: 0,
-    uniqueId: generateUniqueId()
-  };
-  
-  visitorsData.lastVisit = new Date().toISOString();
-  visitorsData.visitCount = (visitorsData.visitCount || 0) + 1;
-  localStorage.setItem(STORAGE.visitorsData, JSON.stringify(visitorsData));
-  
-  // Increment global counter
-  let count = parseInt(localStorage.getItem(STORAGE.visitors) || '0', 10);
-  count++;
-  localStorage.setItem(STORAGE.visitors, count.toString());
-  
-  // Sync to Firebase if available
-  if (firebaseReady && db) {
-    db.collection('_stats').doc('visitors').set({
-      count: firebase.firestore.FieldValue.increment(1),
-      lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: true }).catch(() => {});
-  }
-  
-  return count;
-}
-
-function generateUniqueId() {
-  return `visitor_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-}
-
-function getVisitorCount() {
-  return parseInt(localStorage.getItem(STORAGE.visitors) || '0', 10);
-}
-
-function getVisitorData() {
-  return JSON.parse(localStorage.getItem(STORAGE.visitorsData)) || {};
-}
 
 let db = null;
 let firebaseReady = false;
@@ -76,7 +34,6 @@ let state = {
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
   initFirebase();
-  initVisitorCounter();
   const user = localStorage.getItem(STORAGE.user);
   if (user) {
     state.user = user;
@@ -103,8 +60,8 @@ function showOnboard() {
       hint.textContent = 'Letters, numbers, _ and - only';
       btn.disabled = true;
     } else {
-      // Check if username is already taken (locally)
-      checkUsernameAvailability(v, hint, btn);
+      hint.textContent = '';
+      btn.disabled = false;
     }
   });
 
@@ -114,78 +71,114 @@ function showOnboard() {
   btn.addEventListener('click', saveUsername);
 }
 
-async function checkUsernameAvailability(username, hint, btn) {
-  // Check local leaderboard first
-  const lb = getLocalLeaderboard();
-  if (lb.find(e => e.name.toLowerCase() === username.toLowerCase())) {
-    hint.textContent = '❌ Username already taken';
-    btn.disabled = true;
-    return;
-  }
-
-  // Check Firebase if available
-  if (firebaseReady && db) {
-    try {
-      const docSnapshot = await db.collection('leaderboard').doc(username.toLowerCase()).get();
-      if (docSnapshot.exists) {
-        hint.textContent = '❌ Username already taken';
-        btn.disabled = true;
-        return;
-      }
-    } catch (e) {
-      console.warn('Error checking Firebase availability:', e);
-      // Continue anyway if Firebase check fails
-    }
-  }
-
-  // Username is available
-  hint.textContent = '✓ Username available';
-  hint.style.color = 'var(--good)';
-  btn.disabled = false;
+function usernameDocId(name) {
+  return String(name).toLowerCase().trim().replace(/[^a-z0-9_\-]/g, '_');
 }
 
-function clearUsernameHint() {
+function getOrCreateClaimId() {
+  let id = localStorage.getItem(STORAGE.claim);
+  if (!id) {
+    id = (crypto.randomUUID && crypto.randomUUID()) ||
+      ('c_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10));
+    localStorage.setItem(STORAGE.claim, id);
+  }
+  return id;
+}
+
+async function saveUsername() {
+  const input = document.getElementById('usernameInput');
+  const btn = document.getElementById('saveUsernameBtn');
   const hint = document.getElementById('usernameHint');
-  hint.textContent = '';
-  hint.style.color = '';
-}
+  const name = input.value.trim();
 
-function saveUsername() {
-  const name = document.getElementById('usernameInput').value.trim();
   if (name.length < 2) return;
-  
-  // Final check - make sure it's still unique
-  const lb = getLocalLeaderboard();
-  if (lb.find(e => e.name.toLowerCase() === name.toLowerCase())) {
-    alert('Username already taken! Please choose another.');
+  if (!/^[a-zA-Z0-9_\-]+$/.test(name)) {
+    hint.textContent = 'Letters, numbers, _ and - only';
     return;
   }
 
-  localStorage.setItem(STORAGE.user, name);
-  state.user = name;
+  btn.disabled = true;
+  const prevLabel = btn.textContent;
+  btn.textContent = 'Checking…';
+  hint.textContent = '';
 
-  // Add to local leaderboard if new
-  if (!lb.find(e => e.name === name)) {
-    lb.push({ name, best: 0, attempts: 0, totalCorrect: 0, totalQuestions: 0 });
-    saveLocalLeaderboard(lb);
+  const claimId = getOrCreateClaimId();
+  const docId = usernameDocId(name);
+
+  try {
+    if (!firebaseReady || !db) {
+      hint.textContent = 'Connect to the internet to claim a unique username.';
+      btn.disabled = false;
+      btn.textContent = prevLabel;
+      return;
+    }
+
+    // Unique claim: reject if username OR leaderboard slot already owned
+    await db.runTransaction(async (tx) => {
+      const userRef = db.collection('usernames').doc(docId);
+      const lbRef = db.collection('leaderboard').doc(docId);
+      const userSnap = await tx.get(userRef);
+      const lbSnap = await tx.get(lbRef);
+
+      if (userSnap.exists) {
+        const data = userSnap.data() || {};
+        // Same device reclaiming its own name is OK
+        if (data.claimId && data.claimId === claimId) {
+          return;
+        }
+        throw new Error('TAKEN');
+      }
+
+      if (lbSnap.exists) {
+        const data = lbSnap.data() || {};
+        if (data.claimId && data.claimId !== claimId) {
+          throw new Error('TAKEN');
+        }
+        if (!data.claimId && ((data.attempts || 0) > 0 || (data.totalQuestions || 0) > 0)) {
+          throw new Error('TAKEN');
+        }
+      }
+
+      tx.set(userRef, {
+        name,
+        nameLower: name.toLowerCase(),
+        claimId,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      tx.set(lbRef, {
+        name,
+        claimId,
+        best: 0,
+        attempts: 0,
+        totalCorrect: 0,
+        totalQuestions: 0,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    });
+
+    localStorage.setItem(STORAGE.user, name);
+    state.user = name;
+
+    const lb = getLocalLeaderboard();
+    if (!lb.find(e => e.name.toLowerCase() === name.toLowerCase())) {
+      lb.push({ name, best: 0, attempts: 0, totalCorrect: 0, totalQuestions: 0 });
+      saveLocalLeaderboard(lb);
+    }
+
+    document.getElementById('onboardOverlay').classList.add('hidden');
+    showApp();
+  } catch (e) {
+    const msg = String(e && e.message ? e.message : e);
+    if (msg.includes('TAKEN')) {
+      hint.textContent = 'That username is taken. Try another.';
+    } else {
+      console.error('[COS102] Username claim failed', e);
+      hint.textContent = 'Could not claim username. Check connection and try again.';
+    }
+    btn.disabled = false;
+    btn.textContent = prevLabel;
   }
-
-  // Register user on Firebase if available
-  if (firebaseReady && db) {
-    db.collection('leaderboard').doc(name.toLowerCase()).set({
-      name,
-      best: 0,
-      attempts: 0,
-      totalCorrect: 0,
-      totalQuestions: 0,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }, { merge: true }).catch(e => console.warn('Firebase user seed failed', e));
-  }
-
-  clearUsernameHint();
-  document.getElementById('onboardOverlay').classList.add('hidden');
-  showApp();
 }
 
 function showApp() {
@@ -258,14 +251,7 @@ function goTo(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   const el = document.getElementById('page-' + page);
-  if (!el) {
-    // Page doesn't exist, show 404
-    const notFound = document.getElementById('page-404');
-    if (notFound) notFound.classList.add('active');
-    closeSidebar();
-    return;
-  }
-  el.classList.add('active');
+  if (el) el.classList.add('active');
   const nav = document.querySelector(`.nav-item[data-page="${page}"]`);
   if (nav) nav.classList.add('active');
   closeSidebar();
@@ -366,7 +352,6 @@ function renderHome() {
   const totalQ = hist.reduce((s, h) => s + h.total, 0);
   const totalC = hist.reduce((s, h) => s + h.correct, 0);
   const avg = totalQ ? Math.round((totalC / totalQ) * 100) : 0;
-  const visitors = getVisitorCount();
 
   document.getElementById('homeStats').innerHTML = `
     <div class="stat-card"><span class="num">${hist.length}</span><span class="lbl">Sessions</span></div>
@@ -376,12 +361,6 @@ function renderHome() {
   document.getElementById('homeTopics').innerHTML = QUESTIONS_DATA.topics.map(t =>
     `<span class="chip">${t.name}</span>`
   ).join('');
-  
-  // Add visitor count at the bottom
-  const visitorEl = document.getElementById('homeVisitors');
-  if (visitorEl) {
-    visitorEl.textContent = `${visitors} visitor${visitors !== 1 ? 's' : ''}`;
-  }
 }
 
 // ---------- PRACTICE SETUP ----------
@@ -725,6 +704,21 @@ function saveLocalLeaderboard(lb) {
   localStorage.setItem(STORAGE.leaderboard, JSON.stringify(lb));
 }
 
+/** Rank by total correct answers first (effort), then accuracy, then volume */
+function rankLeaderboardRows(rows) {
+  return [...rows].sort((a, b) => {
+    const ac = Number(a.totalCorrect) || 0;
+    const bc = Number(b.totalCorrect) || 0;
+    if (bc !== ac) return bc - ac;
+    const aq = Number(a.totalQuestions) || 0;
+    const bq = Number(b.totalQuestions) || 0;
+    if (bq !== aq) return bq - aq;
+    const ap = Number(a.best) || 0;
+    const bp = Number(b.best) || 0;
+    return bp - ap;
+  });
+}
+
 async function updateLeaderboard(pct, correct, total) {
   // Local always
   const lb = getLocalLeaderboard();
@@ -738,25 +732,47 @@ async function updateLeaderboard(pct, correct, total) {
   entry.totalQuestions += total;
   if (pct > entry.best) entry.best = pct;
   entry.updatedAt = Date.now();
-  lb.sort((a, b) => b.best - a.best || b.attempts - a.attempts);
-  saveLocalLeaderboard(lb);
+  saveLocalLeaderboard(rankLeaderboardRows(lb));
 
-  // Firebase
   if (!firebaseReady || !db || !state.user) {
     console.log('[COS102] Skipping Firebase sync (not ready)');
     return;
   }
 
-  const docId = state.user.toLowerCase().replace(/[^a-z0-9_\-]/g, '_');
+  const docId = usernameDocId(state.user);
+  const claimId = getOrCreateClaimId();
+
   try {
     const ref = db.collection('leaderboard').doc(docId);
     await db.runTransaction(async (tx) => {
       const snap = await tx.get(ref);
-      const prev = snap.exists ? snap.data() : {
-        best: 0, attempts: 0, totalCorrect: 0, totalQuestions: 0
-      };
+      if (!snap.exists) {
+        // Should have been created at username claim
+        tx.set(ref, {
+          name: state.user,
+          claimId,
+          best: pct,
+          attempts: 1,
+          totalCorrect: correct,
+          totalQuestions: total,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        return;
+      }
+
+      const prev = snap.data() || {};
+
+      // Prevent takeover: another device owns this username
+      if (prev.claimId && prev.claimId !== claimId) {
+        throw new Error('NOT_OWNER');
+      }
+
+      // Bind claimId on legacy rows only if still empty and this is first real activity binding
+      const nextClaim = prev.claimId || claimId;
+
       tx.set(ref, {
         name: state.user,
+        claimId: nextClaim,
         best: Math.max(Number(prev.best) || 0, pct),
         attempts: (Number(prev.attempts) || 0) + 1,
         totalCorrect: (Number(prev.totalCorrect) || 0) + correct,
@@ -766,8 +782,14 @@ async function updateLeaderboard(pct, correct, total) {
     });
     console.log('[COS102] Score synced to Firebase for', state.user);
   } catch (e) {
-    console.error('[COS102] Firebase score sync FAILED:', e.message || e);
-    alert('Could not sync score to the live leaderboard.\n\nCheck Firestore rules allow write to collection "leaderboard".\nError: ' + (e.message || e));
+    const msg = String(e && e.message ? e.message : e);
+    if (msg.includes('NOT_OWNER')) {
+      console.warn('[COS102] Username owned by another player — score not synced');
+      alert('This username belongs to someone else. Your score was saved on this device only.\n\nSign out is not available — clear site data and pick a new unique username.');
+      return;
+    }
+    console.error('[COS102] Firebase score sync FAILED:', msg);
+    alert('Could not sync score to the live leaderboard.\n\nError: ' + msg);
   }
 }
 
@@ -780,48 +802,43 @@ async function renderLeaderboard() {
 
   if (firebaseReady && db) {
     try {
-      const snap = await db.collection('leaderboard')
-        .orderBy('best', 'desc')
-        .limit(50)
-        .get();
-      rows = snap.docs.map(d => d.data());
+      // Load all and rank client-side by total correct (no composite index needed)
+      const snap = await db.collection('leaderboard').limit(100).get();
+      rows = snap.docs.map(d => d.data()).filter(r => r && r.name);
       source = 'firebase';
       console.log('[COS102] Loaded', rows.length, 'rows from Firebase');
     } catch (e) {
       console.warn('[COS102] Firebase read failed, using local:', e.message || e);
-      // Fallback: try without orderBy in case index missing
-      try {
-        const snap2 = await db.collection('leaderboard').limit(50).get();
-        rows = snap2.docs.map(d => d.data());
-        rows.sort((a, b) => (b.best || 0) - (a.best || 0));
-        source = 'firebase';
-      } catch (e2) {
-        rows = getLocalLeaderboard();
-      }
+      rows = getLocalLeaderboard();
     }
   } else {
     rows = getLocalLeaderboard();
   }
 
+  rows = rankLeaderboardRows(rows);
+
   if (!rows.length) {
     list.innerHTML = `<div class="empty-state">No scores yet. Be the first!</div>
-      <p class="fb-status ${firebaseReady ? 'on' : 'off'}">${firebaseReady ? '● Live (Firebase)' : '○ Local only — enable Firebase in js/firebase-config.js'}</p>`;
+      <p class="fb-status ${firebaseReady ? 'on' : 'off'}">${firebaseReady ? '● Live (Firebase)' : '○ Local only'}</p>`;
     return;
   }
 
-  rows.sort((a, b) => (b.best || 0) - (a.best || 0) || (b.attempts || 0) - (a.attempts || 0));
-
-  list.innerHTML = rows.map((e, i) => `
+  list.innerHTML = rows.map((e, i) => {
+    const correct = Number(e.totalCorrect) || 0;
+    const asked = Number(e.totalQuestions) || 0;
+    const best = Number(e.best) || 0;
+    return `
     <div class="lb-row ${i < 3 ? 'top' : ''}">
       <div class="lb-rank">${i + 1}</div>
       <div class="lb-name">${escapeHtml(e.name || 'Player')}${e.name === state.user ? ' (you)' : ''}</div>
-      <div>
-        <div class="lb-score">${e.best || 0}%</div>
-        <div class="lb-meta">${e.attempts || 0} attempt${(e.attempts || 0) !== 1 ? 's' : ''}</div>
+      <div class="lb-stats">
+        <div class="lb-score">${correct} correct</div>
+        <div class="lb-meta">${asked} answered · best ${best}%</div>
       </div>
-    </div>
-  `).join('') +
-  `<p class="fb-status ${source === 'firebase' ? 'on' : 'off'}">${source === 'firebase' ? '● Live leaderboard (Firebase)' : '○ Local leaderboard only'}</p>`;
+    </div>`;
+  }).join('') +
+  `<p class="lb-footnote">Ranked by total correct answers, then questions answered. A high % on 1 question ranks below more correct answers overall.</p>
+   <p class="fb-status ${source === 'firebase' ? 'on' : 'off'}">${source === 'firebase' ? '● Live leaderboard (Firebase)' : '○ Local leaderboard only'}</p>`;
 }
 
 function getHistory() {

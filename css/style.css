@@ -1042,50 +1042,11 @@ button, input, textarea { font: inherit; color: inherit; }
 /* Keep old topic-option styles harmless if leftover */
 .topic-select { display: none; }
 
-/* 404 Error Page */
-.error-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 60vh;
+.lb-stats { text-align: right; }
+.lb-footnote {
+  font-size: 0.78rem;
+  color: var(--ink-3);
   text-align: center;
-  padding: 40px 20px;
-}
-.error-code {
-  font-size: 6rem;
-  font-weight: 800;
-  background: linear-gradient(135deg, var(--accent), var(--bad));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  margin-bottom: 16px;
-  line-height: 1;
-}
-.error-title {
-  font-size: 1.8rem;
-  font-weight: 700;
-  margin-bottom: 12px;
-  color: var(--ink);
-}
-.error-desc {
-  font-size: 1rem;
-  color: var(--ink-2);
-  margin-bottom: 28px;
-  max-width: 400px;
-}
-.error-container .btn {
-  min-width: 150px;
-}
-
-/* Visitor Footer */
-.visitor-footer {
-  margin-top: 48px;
-  padding-top: 24px;
-  border-top: 1px solid var(--line);
-  text-align: center;
-}
-.visitor-text {
-  font-size: 0.9rem;
-  color: var(--ink-2);
+  margin-top: 14px;
+  line-height: 1.4;
 }
